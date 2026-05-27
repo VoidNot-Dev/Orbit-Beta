@@ -3,7 +3,7 @@ name: Orbit - Scheduled Run
 on:
     schedule:
         # Runs daily at 12:15 PM UTC. Adjust to your preferred time.
-        - cron: '15 12 * * *'
+        - cron: '55 11 * * *'
     workflow_dispatch:
         # Allows manual trigger from the GitHub Actions tab
 
