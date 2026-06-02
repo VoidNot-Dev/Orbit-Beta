@@ -239,7 +239,7 @@ export default class PageController {
         if (!activities.length && !flightText.includes('Dashboard')) return null
 
         const availablePoints = this.readAvailablePoints(html)
-        const country = this.readTelemetryField(html, 'country') ?? 'us'
+        const country = this.readTelemetryField(html, 'country') ?? 'in'
         const language = this.readTelemetryField(html, 'language') ?? 'en'
         const today = this.bot.utils.getFormattedDate()
 

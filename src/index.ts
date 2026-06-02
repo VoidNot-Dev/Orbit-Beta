@@ -74,6 +74,8 @@ interface UserData {
     dashboardInfo: DashboardInfo | null
 }
 
+const DEFAULT_GEO_LOCALE = 'in'
+
 export class MicrosoftRewardsBot {
     public logger: LogService
     public config
@@ -110,7 +112,7 @@ export class MicrosoftRewardsBot {
     constructor() {
         this.userData = {
             userName: '',
-            geoLocale: 'US',
+            geoLocale: DEFAULT_GEO_LOCALE,
             langCode: 'en',
             initialPoints: 0,
             currentPoints: 0,
@@ -479,7 +481,9 @@ export class MicrosoftRewardsBot {
 
                 // Set geo
                 this.userData.geoLocale =
-                    account.geoLocale === 'auto' ? data.userProfile.attributes.country : account.geoLocale.toLowerCase()
+                    account.geoLocale === 'auto'
+                        ? DEFAULT_GEO_LOCALE
+                        : account.geoLocale.toLowerCase()
                 if (this.userData.geoLocale.length > 2) {
                     this.logger.warn(
                         'main',

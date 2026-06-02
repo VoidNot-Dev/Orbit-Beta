@@ -36,7 +36,7 @@ export class Search extends TaskBase {
             )
 
             const queryCore = new QueryProvider(this.bot)
-            const locale = (this.bot.userData.geoLocale ?? 'US').toUpperCase()
+            const locale = (this.bot.userData.geoLocale ?? 'in').toUpperCase()
             const langCode = (this.bot.userData.langCode ?? 'en').toLowerCase()
 
             this.bot.logger.debug(

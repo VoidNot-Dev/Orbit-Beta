@@ -5,6 +5,8 @@ import type { MicrosoftRewardsBot } from '../index'
 import { QueryEngine } from '../types/Config'
 import type { GoogleSearch, GoogleTrendsResponse, RedditListing, WikipediaTopResponse } from '../types/Search'
 
+const DEFAULT_QUERY_GEO_LOCALE = 'IN'
+
 export class QueryProvider {
     constructor(private bot: MicrosoftRewardsBot) {}
 
@@ -22,7 +24,7 @@ export class QueryProvider {
             sourceOrder = ['google', 'wikipedia', 'reddit', 'local'],
             related = true,
             langCode = 'en',
-            geoLocale = 'US'
+            geoLocale = DEFAULT_QUERY_GEO_LOCALE
         } = options
 
         try {
@@ -219,8 +221,8 @@ export class QueryProvider {
 
             const mapped = trendsData.map(q => [q[0], q[9]!.slice(1)])
 
-            if (mapped.length < 90 && geoLocale !== 'US') {
-                return this.getGoogleTrends('US')
+            if (mapped.length < 90 && geoLocale.toUpperCase() !== DEFAULT_QUERY_GEO_LOCALE) {
+                return this.getGoogleTrends(DEFAULT_QUERY_GEO_LOCALE)
             }
 
             for (const [topic, related] of mapped) {
@@ -259,7 +261,7 @@ export class QueryProvider {
             const request: AxiosRequestConfig = {
                 url: `https://www.bingapis.com/api/v7/suggestions?q=${encodeURIComponent(
                     query
-                )}&appid=6D0A9B8C5100E9ECC7E11A104ADD76C10219804B&cc=xl&setlang=${langCode}`,
+                )}&appid=6D0A9B8C5100E9ECC7E11A104ADD76C10219804B&cc=in&setlang=${langCode}`,
                 method: 'POST',
                 headers: {
                     ...(this.bot.fingerprint?.headers ?? {}),
@@ -330,7 +332,7 @@ export class QueryProvider {
     async getBingTrendingTopics(langCode = 'en'): Promise<string[]> {
         try {
             const request: AxiosRequestConfig = {
-                url: `https://www.bing.com/api/v7/news/trendingtopics?appid=91B36E34F9D1B900E54E85A77CF11FB3BE5279E6&cc=xl&setlang=${langCode}`,
+                url: `https://www.bing.com/api/v7/news/trendingtopics?appid=91B36E34F9D1B900E54E85A77CF11FB3BE5279E6&cc=in&setlang=${langCode}`,
                 method: 'GET',
                 headers: {
                     Authorization: `Bearer ${this.bot.accessToken}`,

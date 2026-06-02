@@ -38,6 +38,8 @@ Go to your repository settings on GitHub (`Settings` -> `Secrets and variables` 
 | `ACCOUNTS_JSON` | The full contents of your `accounts.json` file. |
 | `CONFIG_JSON`   | The full contents of your `config.json` file.   |
 
+> **Region Setting**: Orbit currently works properly only for the Indian region. The default geo locale is India, represented as `"in"`. You can override it per account in `accounts.json` by setting `"geoLocale"` to `"in"` or another two-letter country code. `"auto"` is still accepted, but the bot falls back to India when it cannot determine a country automatically.
+
 > **Important Config Setting**: In your `CONFIG_JSON`, make sure to disable the internal scheduler and set headless to true:
 >
 > ```json
