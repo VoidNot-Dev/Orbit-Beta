@@ -67,3 +67,26 @@ test('provided diagnostics dump exposes nonzero Bing search missing points when 
     assert.equal(missing.desktopPoints, 1)
     assert.equal(missing.mobilePoints, 0)
 })
+
+test('Next.js dashboard fallback keeps real sidebar point offers and ignores zero-point banners', { skip: !fs.existsSync(path.join(__dirname, '..', 'bot-diagnostics', 'warn-2026-06-06T12-59-11-806Z', 'dump.html')) }, () => {
+    const html = fs.readFileSync(
+        path.join(__dirname, '..', 'bot-diagnostics', 'warn-2026-06-06T12-59-11-806Z', 'dump.html'),
+        'utf8'
+    )
+    const data = parseDashboardHtml(html)
+    const quote = data.morePromotions.find(
+        promo => promo.offerId === 'ENstar_Rewards_DailyGlobalOffer_Evergreen_Saturday'
+    )
+    const appInstall = data.morePromotions.find(promo => promo.offerId === 'ENIN_SapphireAppInstall_Announcement_amc')
+    const uncompletedPointOffers = data.morePromotions.filter(
+        promo => !promo.complete && promo.pointProgressMax > promo.pointProgress
+    )
+
+    assert.equal(quote?.title, 'Have you heard this quote?')
+    assert.equal(quote?.pointProgress, 0)
+    assert.equal(quote?.pointProgressMax, 5)
+    assert.match(quote?.destinationUrl ?? '', /Quote%20of%20the%20day/)
+    assert.equal(appInstall?.pointProgressMax, 0)
+    assert.ok(uncompletedPointOffers.some(promo => promo.offerId === quote?.offerId))
+    assert.ok(uncompletedPointOffers.every(promo => promo.pointProgressMax > 0))
+})

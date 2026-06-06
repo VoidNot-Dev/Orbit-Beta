@@ -288,7 +288,7 @@ export default class PageController {
 
     private rscActivityToPromotion(activity: ReturnType<typeof extractRewardsActivities>[number]): BasePromotion {
         const points = Math.max(0, activity.points ?? 0)
-        const progressMax = points > 0 ? points : 1
+        const progressMax = points
         const complete = activity.isCompleted === true
         const type = this.normalizeRscPromotionType(activity.type)
         const destinationUrl = activity.destinationUrl ?? activity.destination ?? activity.ctaUrl ?? ''
