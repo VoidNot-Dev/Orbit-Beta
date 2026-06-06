@@ -3,6 +3,7 @@ import type { Page } from 'patchright'
 import type { Counters, DashboardData } from '../../../types/DashboardData'
 
 import { BING_SEARCH } from '../../../automation/DashboardSelectors'
+import { runtimeMetrics } from '../../../helpers/RuntimeMetrics'
 import { QueryProvider } from '../../QueryProvider'
 import { TaskBase } from '../../TaskBase'
 
@@ -45,13 +46,16 @@ export class Search extends TaskBase {
                 `Resolving search queries via QueryCore | locale=${locale} | lang=${langCode} | related=true`
             )
 
-            let queries = await queryCore.queryManager({
-                shuffle: true,
-                related: true,
-                langCode,
-                geoLocale: locale,
-                sourceOrder: ['google', 'wikipedia', 'reddit', 'local']
-            })
+            let queries = await runtimeMetrics.measure(`query generation ${isMobile ? 'mobile' : 'desktop'}`, () =>
+                queryCore.queryManager({
+                    shuffle: true,
+                    related: true,
+                    langCode,
+                    geoLocale: locale,
+                    sourceOrder: ['google', 'wikipedia', 'reddit', 'local'],
+                    relatedExpansionLimit: this.bot.config.searchSettings.relatedQueryExpansionLimit
+                })
+            )
 
             queries = [...new Set(queries.map(q => q.trim()).filter(Boolean))]
 
@@ -61,17 +65,26 @@ export class Search extends TaskBase {
             const targetUrl = this.searchPageURL ? this.searchPageURL : this.bingHome
             this.bot.logger.debug(isMobile, 'SEARCH-BING', `Navigating to search page | url=${targetUrl}`)
 
-            await page.goto(targetUrl)
-            await page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {})
+            await page.goto(targetUrl, { waitUntil: 'domcontentloaded' })
             await this.bot.browser.utils.tryDismissAllMessages(page)
 
             let stagnantLoop = 0
-            const stagnantLoopMax = 10
+            const stagnantLoopMax = this.bot.config.searchSettings.stagnantLoopMax ?? 10
 
             for (let i = 0; i < queries.length; i++) {
                 const query = queries[i] as string
 
-                searchCounters = await this.bingSearch(page, query, isMobile)
+                const refreshedCounters = await this.bingSearch(page, query, isMobile)
+                if (!refreshedCounters) {
+                    this.bot.logger.info(
+                        isMobile,
+                        'SEARCH-BING',
+                        `Point refresh skipped | query="${query}" | remaining=${missingPointsTotal}`
+                    )
+                    continue
+                }
+
+                searchCounters = refreshedCounters
                 const newMissingPoints = this.bot.browser.func.missingSearchPoints(searchCounters, isMobile)
                 const newMissingPointsTotal = newMissingPoints.totalPoints
 
@@ -137,7 +150,8 @@ export class Search extends TaskBase {
                         related: true,
                         langCode,
                         geoLocale: locale,
-                        sourceOrder: this.bot.config.searchSettings.queryEngines
+                        sourceOrder: this.bot.config.searchSettings.queryEngines,
+                        relatedExpansionLimit: this.bot.config.searchSettings.relatedQueryExpansionLimit
                     })
 
                     const merged = [...queries, ...extra].map(q => q.trim()).filter(Boolean)
@@ -156,17 +170,17 @@ export class Search extends TaskBase {
                 )
 
                 let stagnantLoop = 0
-                const stagnantLoopMax = 5
+                const stagnantLoopMax = this.bot.config.searchSettings.extraStagnantLoopMax ?? 5
+                const extra = await queryCore.queryManager({
+                    shuffle: true,
+                    related: true,
+                    langCode,
+                    geoLocale: locale,
+                    sourceOrder: this.bot.config.searchSettings.queryEngines,
+                    relatedExpansionLimit: this.bot.config.searchSettings.relatedQueryExpansionLimit
+                })
 
                 while (missingPointsTotal > 0) {
-                    const extra = await queryCore.queryManager({
-                        shuffle: true,
-                        related: true,
-                        langCode,
-                        geoLocale: locale,
-                        sourceOrder: this.bot.config.searchSettings.queryEngines
-                    })
-
                     const merged = [...queries, ...extra].map(q => q.trim()).filter(Boolean)
                     const newPool = [...new Set(merged)]
                     queries = this.bot.utils.shuffleArray(newPool)
@@ -184,7 +198,17 @@ export class Search extends TaskBase {
                             `Extra search | remaining=${missingPointsTotal} | query="${query}"`
                         )
 
-                        searchCounters = await this.bingSearch(page, query, isMobile)
+                        const refreshedCounters = await this.bingSearch(page, query, isMobile)
+                        if (!refreshedCounters) {
+                            this.bot.logger.info(
+                                isMobile,
+                                'SEARCH-BING-EXTRA',
+                                `Point refresh skipped | query="${query}" | remaining=${missingPointsTotal}`
+                            )
+                            continue
+                        }
+
+                        searchCounters = refreshedCounters
                         const newMissingPoints = this.bot.browser.func.missingSearchPoints(searchCounters, isMobile)
                         const newMissingPointsTotal = newMissingPoints.totalPoints
 
@@ -263,9 +287,10 @@ export class Search extends TaskBase {
         }
     }
 
-    private async bingSearch(searchPage: Page, query: string, isMobile: boolean) {
+    private async bingSearch(searchPage: Page, query: string, isMobile: boolean): Promise<Counters | null> {
         const maxAttempts = 5
         const refreshThreshold = 10 // Page gets sluggish after x searches?
+        const pointRefreshInterval = this.bot.config.searchSettings.pointRefreshInterval ?? 1
 
         this.searchCount++
 
@@ -279,7 +304,6 @@ export class Search extends TaskBase {
             this.bot.logger.debug(isMobile, 'SEARCH-BING', `Returning home to refresh state | url=${this.bingHome}`)
 
             await this.navigateToSearchUrl(searchPage, query, isMobile)
-            await searchPage.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {})
             await this.bot.browser.utils.tryDismissAllMessages(searchPage)
         }
 
@@ -308,7 +332,7 @@ export class Search extends TaskBase {
                     `Submitted query via direct Bing URL | attempt=${i + 1}/${maxAttempts} | query="${query}"`
                 )
 
-                await this.bot.utils.wait(3000)
+                await this.bot.utils.wait(1000)
 
                 if (this.bot.config.searchSettings.scrollRandomResults) {
                     await this.bot.utils.wait(2000)
@@ -326,6 +350,15 @@ export class Search extends TaskBase {
                         this.bot.config.searchSettings.searchDelay.max
                     )
                 )
+
+                if (pointRefreshInterval > 1 && this.searchCount % pointRefreshInterval !== 0) {
+                    this.bot.logger.debug(
+                        isMobile,
+                        'SEARCH-BING',
+                        `Skipping point refresh | interval=${pointRefreshInterval} | count=${this.searchCount} | query="${query}"`
+                    )
+                    return null
+                }
 
                 const counters = await this.bot.browser.func.getSearchPoints()
 
@@ -404,7 +437,6 @@ export class Search extends TaskBase {
         this.bot.logger.debug(isMobile, 'SEARCH-BING', `Navigating directly to Bing search | url=${url}`)
 
         await searchPage.goto(url, { waitUntil: 'domcontentloaded', timeout: 30_000 })
-        await searchPage.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {})
         await this.bot.browser.utils.tryDismissAllMessages(searchPage)
     }
 

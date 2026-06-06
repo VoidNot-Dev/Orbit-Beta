@@ -17,6 +17,7 @@ export interface Config {
     plugins?: ConfigPlugins
     scheduler?: ConfigScheduler
     safetyAdvisory?: ConfigSafetyAdvisory
+    browser?: ConfigBrowser
 }
 
 export interface ConfigScheduler {
@@ -60,6 +61,10 @@ export interface ConfigSearchSettings {
     searchResultVisitTime: number | string
     searchDelay: ConfigDelay
     readDelay: ConfigDelay
+    stagnantLoopMax?: number
+    extraStagnantLoopMax?: number
+    relatedQueryExpansionLimit?: number
+    pointRefreshInterval?: number
 }
 
 export interface ConfigDelay {
@@ -85,6 +90,10 @@ export interface ConfigWorkers {
     doDashboardInfo: boolean
     doClaimPoints: boolean
     enforceCoreStreakProtectionGate: boolean
+}
+
+export interface ConfigBrowser {
+    channel?: 'chromium' | 'chrome' | 'msedge' | 'auto'
 }
 
 // Webhooks

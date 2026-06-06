@@ -4,6 +4,7 @@ import { executionContext } from '../context/ExecutionContext'
 import { MicrosoftRewardsBot } from '../index'
 import type { Account } from '../types/Account'
 import type { DashboardData } from '../types/DashboardData'
+import { runtimeMetrics } from '../helpers/RuntimeMetrics'
 
 interface BrowserSession {
     context: BrowserContext
@@ -167,7 +168,9 @@ export class SearchOrchestrator {
                     `Desktop login | account=${accountEmail} | proxy=${account.proxy ?? 'none'}`
                 )
                 desktopSession = await executionContext.run({ isMobile: false, account }, async () =>
-                    this.createDesktopSession(account, accountEmail)
+                    runtimeMetrics.measure(`desktop session ${accountEmail}`, () =>
+                        this.createDesktopSession(account, accountEmail)
+                    )
                 )
                 this.bot.logger.info('main', 'SEARCH-MANAGER', 'Desktop login done')
             } else {
@@ -348,10 +351,7 @@ export class SearchOrchestrator {
 
         await this.bot['login'].login(this.bot.mainDesktopPage, account)
 
-        this.bot.logger.info('main', 'SEARCH-DESKTOP-LOGIN', 'Login passed, verifying')
-        this.bot.logger.debug('main', 'SEARCH-DESKTOP-LOGIN', 'verifyBingSession')
-
-        await this.bot['login'].verifyBingSession(this.bot.mainDesktopPage)
+        this.bot.logger.info('main', 'SEARCH-DESKTOP-LOGIN', 'Login passed; session was verified during finalization')
         this.bot.cookies.desktop = await session.context.cookies()
 
         this.bot.logger.debug('main', 'SEARCH-DESKTOP-LOGIN', 'Cookies stored')
@@ -392,7 +392,9 @@ export class SearchOrchestrator {
                 )
                 this.bot.logger.debug('main', 'SEARCH-MOBILE-SEARCH', 'activities.doSearch (mobile)')
 
-                const pointsEarned = await this.bot.activities.doSearch(data, this.bot.mainMobilePage, true)
+                const pointsEarned = await runtimeMetrics.measure(`mobile search ${accountEmail}`, () =>
+                    this.bot.activities.doSearch(data, this.bot.mainMobilePage, true)
+                )
 
                 this.bot.logger.info(
                     'main',
@@ -456,7 +458,9 @@ export class SearchOrchestrator {
                     'SEARCH-DESKTOP-PARALLEL',
                     `Search start | target=${missingSearchPoints.desktopPoints}`
                 )
-                const pointsEarned = await this.bot.activities.doSearch(data, this.bot.mainDesktopPage, false)
+                const pointsEarned = await runtimeMetrics.measure(`desktop search ${accountEmail}`, () =>
+                    this.bot.activities.doSearch(data, this.bot.mainDesktopPage, false)
+                )
 
                 this.bot.logger.info(
                     'main',
@@ -534,7 +538,9 @@ export class SearchOrchestrator {
                     `Search start | target=${missingSearchPoints.desktopPoints}`
                 )
 
-                const pointsEarned = await this.bot.activities.doSearch(data, this.bot.mainDesktopPage, false)
+                const pointsEarned = await runtimeMetrics.measure(`desktop search ${accountEmail}`, () =>
+                    this.bot.activities.doSearch(data, this.bot.mainDesktopPage, false)
+                )
 
                 this.bot.logger.info(
                     'main',

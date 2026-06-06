@@ -38,16 +38,46 @@ Go to your repository settings on GitHub (`Settings` -> `Secrets and variables` 
 | `ACCOUNTS_JSON` | The full contents of your `accounts.json` file. |
 | `CONFIG_JSON`   | The full contents of your `config.json` file.   |
 
+To refresh the GitHub variables after editing local files:
+
+1. Open `src/accounts.json`, copy the entire JSON array, and paste it into the `ACCOUNTS_JSON` repository secret.
+2. Open `src/config.json`, copy the entire JSON object, and paste it into the `CONFIG_JSON` repository secret.
+3. Keep `DATABASE_URL` set to the Neon connection string.
+4. Re-run **Actions** -> **Orbit - Scheduled Run** -> **Run workflow**.
+
+For cloud runs, each account should keep fingerprint storage enabled so Neon can preserve stable mobile and desktop sessions:
+
+```json
+"saveFingerprint": {
+  "mobile": true,
+  "desktop": true
+}
+```
+
 > **Region Setting**: Orbit currently works properly only for the Indian region. The default geo locale is India, represented as `"in"`. You can override it per account in `accounts.json` by setting `"geoLocale"` to `"in"` or another two-letter country code. `"auto"` is still accepted, but the bot falls back to India when it cannot determine a country automatically.
 
-> **Important Config Setting**: In your `CONFIG_JSON`, make sure to disable the internal scheduler and set headless to true:
+> **Important Config Setting**: In your `CONFIG_JSON`, make sure to disable the internal scheduler, force headless mode, and use the optimized GitHub Actions search profile:
 >
 > ```json
 > "headless": true,
 > "clusters": 1,
 > "scheduler": { "enabled": false },
-> "safetyAdvisory": { "blockedBehavior": "continue" }
+> "safetyAdvisory": { "blockedBehavior": "continue" },
+> "browser": { "channel": "chromium" },
+> "searchSettings": {
+>   "scrollRandomResults": false,
+>   "clickRandomResults": false,
+>   "parallelSearching": true,
+>   "searchResultVisitTime": "3sec",
+>   "searchDelay": { "min": "3sec", "max": "6sec" },
+>   "stagnantLoopMax": 3,
+>   "extraStagnantLoopMax": 2,
+>   "relatedQueryExpansionLimit": 8,
+>   "pointRefreshInterval": 2
+> }
 > ```
+
+The checked-in `src/config.json` already contains this GitHub-ready profile. The workflow also applies the same fast profile automatically before running the bot, so older `CONFIG_JSON` secrets still receive the performance overlay. Updating the secret is still recommended so your GitHub settings match the repository.
 
 ### 3. Deploy the Dashboard (Render)
 

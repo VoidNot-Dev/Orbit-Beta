@@ -13,7 +13,8 @@ import { loadAccounts, loadConfig } from './helpers/ConfigLoader'
 import Helpers from './helpers/Helpers'
 import { checkNodeVersion } from './helpers/SchemaValidator'
 import { initDB, closeDB } from './helpers/Database'
-import { IpcLog, LogService } from './notifications/LogService'
+import { flushDbLogQueue, IpcLog, LogService } from './notifications/LogService'
+import { runtimeMetrics } from './helpers/RuntimeMetrics'
 
 import { AuthManager } from './automation/auth/AuthManager'
 import { executionContext, getCurrentContext } from './context/ExecutionContext'
@@ -59,6 +60,7 @@ async function cleanupAndExit(rewardsBot: MicrosoftRewardsBot | null, code: numb
     if (rewardsBot) {
         await rewardsBot.pluginManager.destroyAll()
     }
+    await flushDbLogQueue()
     await flushAllWebhooks()
     await closeDB()
     process.exit(code)
@@ -278,6 +280,8 @@ export class MicrosoftRewardsBot {
                         `Completed all accounts | Accounts processed: ${allAccountStats.length} | Total points collected: +${totalCollectedPoints} | Old total: ${totalInitialPoints} → New total: ${totalFinalPoints} | Total runtime: ${totalDurationMinutes}min`,
                         'green'
                     )
+                    runtimeMetrics.writeGitHubSummary()
+                    this.logger.info('main', 'TIMING', runtimeMetrics.summaryText())
                     await flushAllWebhooks()
                     resolve(code ?? 0)
                 }
@@ -424,6 +428,8 @@ export class MicrosoftRewardsBot {
                 'green'
             )
 
+            runtimeMetrics.writeGitHubSummary()
+            this.logger.info('main', 'TIMING', runtimeMetrics.summaryText())
             await flushAllWebhooks()
         }
 
@@ -439,7 +445,9 @@ export class MicrosoftRewardsBot {
 
         try {
             return await executionContext.run({ isMobile: true, account }, async () => {
-                mobileSession = await this.browserFactory.createBrowser(account)
+                mobileSession = await runtimeMetrics.measure(`browser create mobile ${accountEmail}`, () =>
+                    this.browserFactory.createBrowser(account)
+                )
                 const initialContext: BrowserContext = mobileSession.context
                 this.mainMobilePage = await initialContext.newPage()
 
@@ -448,7 +456,7 @@ export class MicrosoftRewardsBot {
 
                 this.logger.info('main', 'BROWSER', `Mobile Browser started | ${accountEmail}`)
 
-                await this.login.login(this.mainMobilePage, account)
+                await runtimeMetrics.measure(`login mobile ${accountEmail}`, () => this.login.login(this.mainMobilePage, account))
 
                 const needsAppAccessToken =
                     this.config.workers.doAppPromotions ||
@@ -476,8 +484,12 @@ export class MicrosoftRewardsBot {
                 this.cookies.mobile = await initialContext.cookies()
                 this.fingerprint = mobileSession.fingerprint
 
-                const data: DashboardData = await this.browser.func.getDashboardData()
-                const appData: AppDashboardData = await this.browser.func.getAppDashboardData()
+                const data: DashboardData = await runtimeMetrics.measure(`dashboard data ${accountEmail}`, () =>
+                    this.browser.func.getDashboardData()
+                )
+                const appData: AppDashboardData = await runtimeMetrics.measure(`app dashboard data ${accountEmail}`, () =>
+                    this.browser.func.getAppDashboardData()
+                )
 
                 // Set geo
                 this.userData.geoLocale =
@@ -496,8 +508,12 @@ export class MicrosoftRewardsBot {
                 this.userData.currentPoints = data.userStatus.availablePoints
                 const initialPoints = this.userData.initialPoints ?? 0
 
-                const browserEarnable = await this.browser.func.getBrowserEarnablePoints()
-                const appEarnable = await this.browser.func.getAppEarnablePoints()
+                const browserEarnable = await runtimeMetrics.measure(`browser earnable ${accountEmail}`, () =>
+                    this.browser.func.getBrowserEarnablePoints()
+                )
+                const appEarnable = await runtimeMetrics.measure(`app earnable ${accountEmail}`, () =>
+                    this.browser.func.getAppEarnablePoints()
+                )
 
                 this.pointsCanCollect = browserEarnable.mobileSearchPoints + (appEarnable?.totalEarnablePoints ?? 0)
 
@@ -527,11 +543,23 @@ export class MicrosoftRewardsBot {
                     this.userData.dashboardInfo = dashInfo
                 }
 
-                if (this.config.workers.doAppPromotions) await this.workers.doAppPromotions(appData)
-                if (this.config.workers.doDailySet) await this.workers.doDailySet(data, this.mainMobilePage)
-                if (this.config.workers.doSpecialPromotions) await this.workers.doSpecialPromotions(data)
+                if (this.config.workers.doAppPromotions) {
+                    await runtimeMetrics.measure(`app promotions ${accountEmail}`, () => this.workers.doAppPromotions(appData))
+                }
+                if (this.config.workers.doDailySet) {
+                    await runtimeMetrics.measure(`daily set ${accountEmail}`, () =>
+                        this.workers.doDailySet(data, this.mainMobilePage)
+                    )
+                }
+                if (this.config.workers.doSpecialPromotions) {
+                    await runtimeMetrics.measure(`special promotions ${accountEmail}`, () =>
+                        this.workers.doSpecialPromotions(data)
+                    )
+                }
                 if (this.config.workers.doMorePromotions) {
-                    await this.workers.doMorePromotions(data, this.mainMobilePage)
+                    await runtimeMetrics.measure(`more promotions ${accountEmail}`, () =>
+                        this.workers.doMorePromotions(data, this.mainMobilePage)
+                    )
                     if (this.pluginManager.hasOfficialCoreEntitlement()) {
                         await this.activities.doTemporaryPunchcards(this.mainMobilePage)
                     }
@@ -569,17 +597,25 @@ export class MicrosoftRewardsBot {
                     await this.activities.doRedeemGoal(this.mainMobilePage, this.config.redeemGoal)
                 }
 
-                const searchPoints = await this.browser.func.getSearchPoints()
+                const searchPoints = await runtimeMetrics.measure(`search points before search ${accountEmail}`, () =>
+                    this.browser.func.getSearchPoints()
+                )
                 const missingSearchPoints = this.browser.func.missingSearchPoints(searchPoints, true)
 
                 this.cookies.mobile = await initialContext.cookies()
+                if (!mobileSession) throw new Error('Mobile session was not initialized before search phase')
+                const activeMobileSession = mobileSession
 
-                const { mobilePoints, desktopPoints } = await this.searchManager.doSearches(
-                    data,
-                    missingSearchPoints,
-                    mobileSession,
-                    account,
-                    accountEmail
+                const { mobilePoints, desktopPoints } = await runtimeMetrics.measure(
+                    `searches ${accountEmail}`,
+                    () =>
+                        this.searchManager.doSearches(
+                            data,
+                            missingSearchPoints,
+                            activeMobileSession,
+                            account,
+                            accountEmail
+                        )
                 )
 
                 mobileContextClosed = true
@@ -627,12 +663,13 @@ async function main(): Promise<void> {
     checkNodeVersion()
 
     // Initialize database connection (no-op if DATABASE_URL is not set)
-    await initDB()
+    await runtimeMetrics.measure('database init', () => initDB())
 
     const rewardsBot = new MicrosoftRewardsBot()
 
     process.on('beforeExit', () => {
         void rewardsBot.pluginManager.destroyAll()
+        void flushDbLogQueue()
         void flushAllWebhooks()
         void closeDB()
     })
@@ -654,15 +691,15 @@ async function main(): Promise<void> {
     })
 
     try {
-        await rewardsBot.initialize()
+        await runtimeMetrics.measure('initialize', () => rewardsBot.initialize())
         if (cluster.isWorker) {
             await rewardsBot.run()
             return
         }
 
         const exitCode = isSchedulerEnabled(rewardsBot.config.scheduler)
-            ? await runScheduled(rewardsBot)
-            : await runSingle(rewardsBot)
+            ? await runtimeMetrics.measure('scheduler', () => runScheduled(rewardsBot))
+            : await runtimeMetrics.measure('single run', () => runSingle(rewardsBot))
 
         await cleanupAndExit(rewardsBot, exitCode)
     } catch (error) {
@@ -674,7 +711,7 @@ async function main(): Promise<void> {
 
 async function runSingle(rewardsBot: MicrosoftRewardsBot): Promise<number> {
     rewardsBot.dashboardRunState = 'checking'
-    const canRun = await checkSafetyAdvisory(rewardsBot)
+    const canRun = await runtimeMetrics.measure('safety advisory', () => checkSafetyAdvisory(rewardsBot))
     if (!canRun) {
         rewardsBot.dashboardRunState = 'blocked'
         return 1
@@ -728,6 +765,7 @@ async function runScheduled(rewardsBot: MicrosoftRewardsBot): Promise<number> {
 main().catch(async error => {
     const tmpBot = new MicrosoftRewardsBot()
     tmpBot.logger.error('main', 'MAIN-ERROR', error as Error)
+    await flushDbLogQueue()
     await flushAllWebhooks()
     await closeDB()
     process.exit(1)
