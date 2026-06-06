@@ -1,11 +1,12 @@
 {
     "baseURL": "https://rewards.bing.com/dashboard",
     "sessionPath": "sessions",
-    "headless": false,
+    "headless": true,
     "runOnZeroPoints": false,
     "clusters": 1,
-    "errorDiagnostics": false,
+    "errorDiagnostics": true,
     "workers": {
+        "doMobileBrowserPhase": true,
         "doDailySet": true,
         "doSpecialPromotions": true,
         "doMorePromotions": true,
@@ -23,23 +24,23 @@
     "searchOnBingLocalQueries": true,
     "globalTimeout": "30sec",
     "searchSettings": {
-        "scrollRandomResults": true,
-        "clickRandomResults": true,
+        "scrollRandomResults": false,
+        "clickRandomResults": false,
         "parallelSearching": true,
         "queryEngines": ["google", "wikipedia", "reddit", "local"],
-        "searchResultVisitTime": "10sec",
+        "searchResultVisitTime": "3sec",
         "searchDelay": {
-            "min": "30sec",
-            "max": "1min"
+            "min": "3sec",
+            "max": "6sec"
         },
         "readDelay": {
-            "min": "30sec",
-            "max": "1min"
+            "min": "10sec",
+            "max": "15sec"
         },
-        "stagnantLoopMax": 10,
-        "extraStagnantLoopMax": 5,
-        "relatedQueryExpansionLimit": 50,
-        "pointRefreshInterval": 1
+        "stagnantLoopMax": 3,
+        "extraStagnantLoopMax": 2,
+        "relatedQueryExpansionLimit": 8,
+        "pointRefreshInterval": 2
     },
     "debugLogs": false,
     "consoleLogFilter": {
@@ -94,6 +95,9 @@
         "enabled": true,
         "url": "https://raw.githubusercontent.com/AnujYadav-Dev/Orbit-Beta/main/safety-advisory.json",
         "timeout": "10sec",
-        "blockedBehavior": "prompt"
+        "blockedBehavior": "continue"
+    },
+    "browser": {
+        "channel": "chromium"
     }
 }

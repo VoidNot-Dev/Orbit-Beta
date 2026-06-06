@@ -142,6 +142,13 @@ function contextAround(text, index, radius = 900) {
     return text.slice(Math.max(0, index - radius), Math.min(text.length, index + radius))
 }
 
+function objectContextAround(text, index) {
+    const start = text.lastIndexOf('{', index)
+    const end = text.indexOf('}', index)
+    if (start >= 0 && end > start) return text.slice(start, end + 1)
+    return contextAround(text, index, 900)
+}
+
 function extractRewardsActivities(text) {
     const activities = []
 
@@ -156,6 +163,7 @@ function extractRewardsActivities(text) {
             hash: hash && hash !== '$undefined' ? hash : undefined,
             destination: readStringField(context, 'destination'),
             destinationUrl: readStringField(context, 'destinationUrl'),
+            ctaUrl: readStringField(context, 'ctaUrl'),
             title: readStringField(context, 'title'),
             partner: readStringField(context, 'partner'),
             activity: readStringField(context, 'activity'),
@@ -165,14 +173,23 @@ function extractRewardsActivities(text) {
     }
 
     for (const match of text.matchAll(/"offerId"\s*:\s*"([^"]+)"/g)) {
-        if (match.index === undefined || !match[1] || activities.some(activity => activity.offerId === match[1])) continue
-        const context = contextAround(text, match.index, 900)
+        if (match.index === undefined || !match[1]) continue
+        const context = objectContextAround(text, match.index)
+        const existing = activities.find(activity => activity.offerId === match[1])
+        if (existing) {
+            existing.ctaUrl = existing.ctaUrl ?? readStringField(context, 'ctaUrl')
+            existing.destination = existing.destination ?? readStringField(context, 'destination')
+            existing.destinationUrl = existing.destinationUrl ?? readStringField(context, 'destinationUrl')
+            continue
+        }
+
         activities.push({
             type: 'offer',
             offerId: match[1],
             hash: readStringField(context, 'hash'),
             destination: readStringField(context, 'destination'),
             destinationUrl: readStringField(context, 'destinationUrl'),
+            ctaUrl: readStringField(context, 'ctaUrl'),
             title: readStringField(context, 'title'),
             points: readNumberField(context, 'points'),
             isCompleted: readBooleanField(context, 'isCompleted')

@@ -7,7 +7,7 @@ import type { MicrosoftRewardsBot } from '../index'
 
 import type { AppDashboardData } from '../types/AppDashboardData'
 import type { AppUserData } from '../types/AppUserData'
-import type { BasePromotion, Counters, DashboardData } from '../types/DashboardData'
+import type { BasePromotion, Counters, DashboardData, DashboardImpression } from '../types/DashboardData'
 import type { AppEarnablePoints, BrowserEarnablePoints, MissingSearchPoints } from '../types/Points'
 import type { XboxDashboardData } from '../types/XboxDashboardData'
 import { URLS } from './DashboardSelectors'
@@ -253,11 +253,12 @@ export default class PageController {
 
         const dailySetPromotions = promotions.filter(p => p.activityType === 'dailyset')
         const morePromotions = promotions.filter(p => p.activityType !== 'dailyset')
+        const counters = this.parseNextDashboardCounters(flightText, html)
 
         return {
             userStatus: {
                 availablePoints,
-                counters: this.emptyCounters(),
+                counters,
                 isRewardsUser: true,
                 levelInfo: {
                     activeLevel: '',
@@ -290,12 +291,13 @@ export default class PageController {
         const progressMax = points > 0 ? points : 1
         const complete = activity.isCompleted === true
         const type = this.normalizeRscPromotionType(activity.type)
+        const destinationUrl = activity.destinationUrl ?? activity.destination ?? activity.ctaUrl ?? ''
 
         return {
             name: activity.title ?? activity.offerId ?? activity.type,
             priority: 0,
             attributes: {
-                destination: activity.destination ?? activity.destinationUrl ?? '',
+                destination: destinationUrl,
                 offerid: activity.offerId ?? '',
                 progress: complete ? String(progressMax) : '0',
                 max: String(progressMax),
@@ -333,7 +335,7 @@ export default class PageController {
             iconUrl: '',
             animatedIconUrl: '',
             animatedLargeBackgroundImageUrl: '',
-            destinationUrl: activity.destinationUrl ?? activity.destination ?? '',
+            destinationUrl,
             linkText: '',
             hash: activity.hash ?? '',
             activityType: activity.type,
@@ -367,6 +369,94 @@ export default class PageController {
         return match?.[1] ?? null
     }
 
+    private parseNextDashboardCounters(flightText: string, html: string): Counters {
+        const counters = this.emptyCounters()
+        const bingSearch = this.readBingSearchProgress(flightText) ?? this.readBingSearchProgress(html)
+
+        if (bingSearch && bingSearch.total > 0) {
+            counters.pcSearch.push(this.syntheticSearchCounter('Bing Search', bingSearch.current, bingSearch.total))
+        }
+
+        return counters
+    }
+
+    private readBingSearchProgress(text: string): { current: number; total: number } | null {
+        const patterns = [
+            /"children"\s*:\s*"Bing"[\s\S]{0,2600}?"children"\s*:\s*"Search:\s*([\d,]+)\s*\/\s*([\d,]+)"/gi,
+            /Bing[\s\S]{0,2600}?Search:\s*([\d,]+)\s*\/\s*([\d,]+)/gi,
+            /Search with Bing[\s\S]{0,500}?\(?\s*([\d,]+)\s*\/\s*([\d,]+)\s*searches?\)?/gi
+        ]
+
+        for (const pattern of patterns) {
+            for (const match of text.matchAll(pattern)) {
+                const current = this.parseCounterNumber(match[1])
+                const total = this.parseCounterNumber(match[2])
+                if (current !== null && total !== null && total > 0) return { current, total }
+            }
+        }
+
+        return null
+    }
+
+    private parseCounterNumber(value: string | undefined): number | null {
+        if (!value) return null
+        const parsed = Number(value.replace(/,/g, ''))
+        return Number.isFinite(parsed) ? parsed : null
+    }
+
+    private syntheticSearchCounter(title: string, pointProgress: number, pointProgressMax: number): DashboardImpression {
+        return {
+            name: title,
+            priority: 0,
+            attributes: {
+                destination: URLS.bingHome,
+                hidden: 'False',
+                type: 'urlreward',
+                offerid: '',
+                give_eligible: 'False'
+            },
+            offerId: '',
+            complete: pointProgress >= pointProgressMax,
+            counter: 0,
+            activityProgress: pointProgress,
+            activityProgressMax: pointProgressMax,
+            pointProgress,
+            pointProgressMax,
+            promotionType: 'urlreward',
+            promotionSubtype: '',
+            title,
+            extBannerTitle: '',
+            titleStyle: '',
+            theme: '',
+            description: '',
+            extBannerDescription: '',
+            descriptionStyle: '',
+            showcaseTitle: '',
+            showcaseDescription: '',
+            imageUrl: '',
+            dynamicImage: '',
+            smallImageUrl: '',
+            backgroundImageUrl: '',
+            showcaseBackgroundImageUrl: '',
+            showcaseBackgroundLargeImageUrl: '',
+            promotionBackgroundLeft: '',
+            promotionBackgroundRight: '',
+            iconUrl: '',
+            animatedIconUrl: '',
+            animatedLargeBackgroundImageUrl: '',
+            destinationUrl: URLS.bingHome,
+            linkText: '',
+            hash: '',
+            activityType: 'search',
+            isRecurring: true,
+            isHidden: false,
+            isTestOnly: false,
+            isGiveEligible: false,
+            level: '',
+            exclusiveLockedFeatureStatus: 'unlocked'
+        } as unknown as DashboardImpression
+    }
+
     private emptyCounters(): Counters {
         return {
             pcSearch: [],
@@ -383,7 +473,7 @@ export default class PageController {
     async getAppDashboardData(): Promise<AppDashboardData> {
         try {
             if (!this.bot.accessToken) {
-                this.bot.logger.warn(
+                this.bot.logger.info(
                     this.bot.isMobile,
                     'GET-APP-DASHBOARD-DATA',
                     'No mobile access token available, skipping app dashboard data'
@@ -526,7 +616,7 @@ export default class PageController {
     async getAppEarnablePoints(): Promise<AppEarnablePoints> {
         try {
             if (!this.bot.accessToken) {
-                this.bot.logger.warn(
+                this.bot.logger.info(
                     this.bot.isMobile,
                     'GET-APP-EARNABLE-POINTS',
                     'No mobile access token available, app-only points will be skipped'
