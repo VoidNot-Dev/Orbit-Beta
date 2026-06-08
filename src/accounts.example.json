@@ -14,8 +14,8 @@
             "password": ""
         },
         "saveFingerprint": {
-            "mobile": true,
-            "desktop": true
+            "mobile": false,
+            "desktop": false
         }
     },
     {
@@ -33,8 +33,8 @@
             "password": ""
         },
         "saveFingerprint": {
-            "mobile": true,
-            "desktop": true
+            "mobile": false,
+            "desktop": false
         }
     }
 ]

@@ -26,7 +26,6 @@ type BrowserCandidate = BrowserChannel | undefined
 
 class BrowserManager {
     private readonly bot: MicrosoftRewardsBot
-    private static cachedBrowserChannel: BrowserCandidate | null = null
     private static readonly BROWSER_ARGS = [
         '--no-sandbox',
         '--mute-audio',
@@ -67,16 +66,6 @@ class BrowserManager {
      * Edge can block account.live.com on some Windows installations.
      */
     private async detectBrowserChannel(): Promise<BrowserCandidate> {
-        const configuredChannel = process.env.BROWSER_CHANNEL ?? this.bot.config.browser?.channel
-        if (configuredChannel && configuredChannel !== 'auto') {
-            if (configuredChannel === 'chromium') return undefined
-            return configuredChannel as BrowserChannel
-        }
-
-        if (BrowserManager.cachedBrowserChannel !== null) {
-            return BrowserManager.cachedBrowserChannel
-        }
-
         for (const channel of [undefined, 'chrome', 'msedge'] as const) {
             try {
                 const testBrowser = await rebrowser.chromium.launch({
@@ -84,7 +73,6 @@ class BrowserManager {
                     ...(channel && { channel })
                 })
                 await testBrowser.close()
-                BrowserManager.cachedBrowserChannel = channel
                 return channel
             } catch {
                 // Channel not available, try next

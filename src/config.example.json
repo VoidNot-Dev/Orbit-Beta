@@ -1,12 +1,11 @@
 {
     "baseURL": "https://rewards.bing.com/dashboard",
     "sessionPath": "sessions",
-    "headless": true,
+    "headless": false,
     "runOnZeroPoints": false,
     "clusters": 1,
-    "errorDiagnostics": true,
+    "errorDiagnostics": false,
     "workers": {
-        "doMobileBrowserPhase": true,
         "doDailySet": true,
         "doSpecialPromotions": true,
         "doMorePromotions": true,
@@ -24,23 +23,19 @@
     "searchOnBingLocalQueries": true,
     "globalTimeout": "30sec",
     "searchSettings": {
-        "scrollRandomResults": false,
-        "clickRandomResults": false,
+        "scrollRandomResults": true,
+        "clickRandomResults": true,
         "parallelSearching": true,
         "queryEngines": ["google", "wikipedia", "reddit", "local"],
-        "searchResultVisitTime": "3sec",
+        "searchResultVisitTime": "10sec",
         "searchDelay": {
-            "min": "3sec",
-            "max": "6sec"
+            "min": "30sec",
+            "max": "1min"
         },
         "readDelay": {
-            "min": "10sec",
-            "max": "15sec"
-        },
-        "stagnantLoopMax": 3,
-        "extraStagnantLoopMax": 2,
-        "relatedQueryExpansionLimit": 8,
-        "pointRefreshInterval": 2
+            "min": "30sec",
+            "max": "1min"
+        }
     },
     "debugLogs": false,
     "consoleLogFilter": {
@@ -95,9 +90,6 @@
         "enabled": true,
         "url": "https://raw.githubusercontent.com/AnujYadav-Dev/Orbit-Beta/main/safety-advisory.json",
         "timeout": "10sec",
-        "blockedBehavior": "continue"
-    },
-    "browser": {
-        "channel": "chromium"
+        "blockedBehavior": "prompt"
     }
 }

@@ -18,20 +18,9 @@ export interface IpcLog {
 }
 
 type ChalkFn = (msg: string) => string
-interface DbLogEntry {
-    level: LogLevel
-    title: string
-    platform: string
-    username: string
-    message: string
-    pointsData: Record<string, number> | null
-}
 
 // Unique ID for this bot run - used to group logs in the dashboard
 const RUN_ID = crypto.randomUUID()
-const DB_LOG_BATCH_SIZE = 25
-const dbLogQueue: DbLogEntry[] = []
-let flushingDbLogs = false
 
 function platformText(platform: Platform): DashboardPlatform {
     return platform === 'main' ? 'MAIN' : platform ? 'MOBILE' : 'DESKTOP'
@@ -59,70 +48,6 @@ function consoleOut(level: LogLevel, msg: string, chalkFn: ChalkFn | null): void
 
 function formatMessage(message: string | Error): string {
     return message instanceof Error ? `${message.message}\n${message.stack || ''}` : message
-}
-
-function extractPointsData(title: string, message: string): Record<string, number> | null {
-    if (title !== 'ACCOUNT-END' && title !== 'RUN-END') return null
-
-    const collectedMatch = message.match(/Total:\s*\+(\d+)/)
-    const oldMatch = message.match(/Old:\s*(\d+)/)
-    const newMatch = message.match(/New:\s*(\d+)/)
-    if (!collectedMatch) return null
-
-    return {
-        collectedPoints: parseInt(collectedMatch[1]!, 10),
-        initialPoints: oldMatch ? parseInt(oldMatch[1]!, 10) : 0,
-        finalPoints: newMatch ? parseInt(newMatch[1]!, 10) : 0
-    }
-}
-
-export async function flushDbLogQueue(): Promise<void> {
-    while (flushingDbLogs) {
-        await new Promise(resolve => setTimeout(resolve, 25))
-    }
-
-    if (dbLogQueue.length === 0) return
-
-    const db = getPool()
-    if (!db) {
-        dbLogQueue.length = 0
-        return
-    }
-
-    flushingDbLogs = true
-    const batch = dbLogQueue.splice(0, dbLogQueue.length)
-
-    try {
-        const values: unknown[] = []
-        const placeholders = batch
-            .map((entry, index) => {
-                const offset = index * 7
-                values.push(
-                    RUN_ID,
-                    entry.level,
-                    entry.title,
-                    entry.platform,
-                    entry.username,
-                    entry.message,
-                    entry.pointsData ? JSON.stringify(entry.pointsData) : null
-                )
-                return `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6}, $${offset + 7})`
-            })
-            .join(',')
-
-        await db.query(
-            `INSERT INTO run_logs (run_id, level, title, platform, username, message, points_data)
-             VALUES ${placeholders}`,
-            values
-        )
-    } catch {
-        // Silently fail - logging should never crash the bot.
-    } finally {
-        flushingDbLogs = false
-        if (dbLogQueue.length >= DB_LOG_BATCH_SIZE) {
-            void flushDbLogQueue()
-        }
-    }
 }
 
 export class LogService {
@@ -228,18 +153,43 @@ export class LogService {
 
         // ── Cloud mode: persist key logs to Neon DB ──
         if (isCloudMode() && level !== 'debug') {
-            dbLogQueue.push({
-                level,
-                title,
-                platform: platformText(isMobile),
-                username: userName,
-                message: formatted,
-                pointsData: extractPointsData(title, formatted)
-            })
+            this.writeLogToDB(level, title, platformText(isMobile), userName, formatted).catch(() => {})
+        }
+    }
 
-            if (dbLogQueue.length >= DB_LOG_BATCH_SIZE || title === 'ACCOUNT-END' || title === 'RUN-END') {
-                void flushDbLogQueue()
+    private async writeLogToDB(
+        level: LogLevel,
+        title: string,
+        platform: string,
+        username: string,
+        message: string
+    ): Promise<void> {
+        const db = getPool()
+        if (!db) return
+
+        try {
+            // Extract points data from ACCOUNT-END and RUN-END messages for structured querying
+            let pointsData: any = null
+            if (title === 'ACCOUNT-END' || title === 'RUN-END') {
+                const collectedMatch = message.match(/Total:\s*\+(\d+)/)
+                const oldMatch = message.match(/Old:\s*(\d+)/)
+                const newMatch = message.match(/New:\s*(\d+)/)
+                if (collectedMatch) {
+                    pointsData = {
+                        collectedPoints: parseInt(collectedMatch[1]!, 10),
+                        initialPoints: oldMatch ? parseInt(oldMatch[1]!, 10) : 0,
+                        finalPoints: newMatch ? parseInt(newMatch[1]!, 10) : 0
+                    }
+                }
             }
+
+            await db.query(
+                `INSERT INTO run_logs (run_id, level, title, platform, username, message, points_data)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+                [RUN_ID, level, title, platform, username, message, pointsData ? JSON.stringify(pointsData) : null]
+            )
+        } catch {
+            // Silently fail - logging should never crash the bot
         }
     }
 

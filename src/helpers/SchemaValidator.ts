@@ -44,10 +44,6 @@ const SafetyAdvisorySchema = z.object({
     blockedBehavior: z.enum(['prompt', 'continue', 'stop']).default('prompt')
 })
 
-const BrowserSchema = z.object({
-    channel: z.enum(['chromium', 'chrome', 'msedge', 'auto']).optional()
-})
-
 // Webhook
 const WebhookSchema = z.object({
     discord: z
@@ -102,11 +98,7 @@ export const ConfigSchema = z.object({
         queryEngines: z.array(QueryEngineSchema),
         searchResultVisitTime: NumberOrString,
         searchDelay: DelaySchema,
-        readDelay: DelaySchema,
-        stagnantLoopMax: z.number().int().positive().optional(),
-        extraStagnantLoopMax: z.number().int().positive().optional(),
-        relatedQueryExpansionLimit: z.number().int().nonnegative().optional(),
-        pointRefreshInterval: z.number().int().positive().optional()
+        readDelay: DelaySchema
     }),
     debugLogs: z.boolean(),
     proxy: z.object({
@@ -116,8 +108,7 @@ export const ConfigSchema = z.object({
     webhook: WebhookSchema,
     redeemGoal: RedeemGoalSchema.optional(),
     scheduler: SchedulerSchema.optional(),
-    safetyAdvisory: SafetyAdvisorySchema.optional(),
-    browser: BrowserSchema.optional()
+    safetyAdvisory: SafetyAdvisorySchema.optional()
 })
 
 // Account

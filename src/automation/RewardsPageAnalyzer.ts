@@ -4,7 +4,6 @@ export interface RewardsActivityModel {
     hash?: string
     destination?: string
     destinationUrl?: string
-    ctaUrl?: string
     title?: string
     partner?: string
     activity?: string
@@ -210,13 +209,6 @@ function contextAround(text: string, index: number, radius = 900): string {
     return text.slice(Math.max(0, index - radius), Math.min(text.length, index + radius))
 }
 
-function objectContextAround(text: string, index: number): string {
-    const start = text.lastIndexOf('{', index)
-    const end = text.indexOf('}', index)
-    if (start >= 0 && end > start) return text.slice(start, end + 1)
-    return contextAround(text, index, 900)
-}
-
 export function extractRewardsActivities(text: string): RewardsActivityModel[] {
     const activities: RewardsActivityModel[] = []
     const modelMatches = text.matchAll(/"type"\s*:\s*"([^"]+)"[\s\S]{0,1200}?"model"\s*:\s*\{/g)
@@ -228,7 +220,6 @@ export function extractRewardsActivities(text: string): RewardsActivityModel[] {
         const hash = readStringField(context, 'hash') ?? readStringField(context, 'activationHash')
         const destination = readStringField(context, 'destination')
         const destinationUrl = readStringField(context, 'destinationUrl')
-        const ctaUrl = readStringField(context, 'ctaUrl')
 
         activities.push({
             type: match[1],
@@ -236,7 +227,6 @@ export function extractRewardsActivities(text: string): RewardsActivityModel[] {
             hash: hash && hash !== '$undefined' ? hash : undefined,
             destination,
             destinationUrl,
-            ctaUrl,
             title: readStringField(context, 'title'),
             partner: readStringField(context, 'partner'),
             activity: readStringField(context, 'activity'),
@@ -247,25 +237,16 @@ export function extractRewardsActivities(text: string): RewardsActivityModel[] {
 
     const offerMatches = text.matchAll(/"offerId"\s*:\s*"([^"]+)"/g)
     for (const match of offerMatches) {
-        if (match.index === undefined || !match[1]) {
+        if (match.index === undefined || !match[1] || activities.some(activity => activity.offerId === match[1])) {
             continue
         }
-        const context = objectContextAround(text, match.index)
-        const existing = activities.find(activity => activity.offerId === match[1])
-        if (existing) {
-            existing.ctaUrl = existing.ctaUrl ?? readStringField(context, 'ctaUrl')
-            existing.destination = existing.destination ?? readStringField(context, 'destination')
-            existing.destinationUrl = existing.destinationUrl ?? readStringField(context, 'destinationUrl')
-            continue
-        }
-
+        const context = contextAround(text, match.index, 900)
         activities.push({
             type: 'offer',
             offerId: match[1],
             hash: readStringField(context, 'hash'),
             destination: readStringField(context, 'destination'),
             destinationUrl: readStringField(context, 'destinationUrl'),
-            ctaUrl: readStringField(context, 'ctaUrl'),
             title: readStringField(context, 'title'),
             points: readNumberField(context, 'points'),
             isCompleted: readBooleanField(context, 'isCompleted')

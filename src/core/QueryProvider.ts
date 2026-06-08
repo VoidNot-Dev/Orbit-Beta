@@ -6,7 +6,6 @@ import { QueryEngine } from '../types/Config'
 import type { GoogleSearch, GoogleTrendsResponse, RedditListing, WikipediaTopResponse } from '../types/Search'
 
 const DEFAULT_QUERY_GEO_LOCALE = 'IN'
-const queryCache = new Map<string, string[]>()
 
 export class QueryProvider {
     constructor(private bot: MicrosoftRewardsBot) {}
@@ -18,7 +17,6 @@ export class QueryProvider {
             related?: boolean
             langCode?: string
             geoLocale?: string
-            relatedExpansionLimit?: number
         } = {}
     ): Promise<string[]> {
         const {
@@ -26,30 +24,14 @@ export class QueryProvider {
             sourceOrder = ['google', 'wikipedia', 'reddit', 'local'],
             related = true,
             langCode = 'en',
-            geoLocale = DEFAULT_QUERY_GEO_LOCALE,
-            relatedExpansionLimit = this.bot.config.searchSettings.relatedQueryExpansionLimit ?? 50
+            geoLocale = DEFAULT_QUERY_GEO_LOCALE
         } = options
 
         try {
-            const cacheKey = [
-                new Date().toISOString().slice(0, 10),
-                sourceOrder.join(','),
-                related ? 'related' : 'plain',
-                langCode,
-                geoLocale.toUpperCase(),
-                relatedExpansionLimit
-            ].join('|')
-
-            const cached = queryCache.get(cacheKey)
-            if (cached) {
-                const cachedQueries = cached.slice()
-                return shuffle ? this.bot.utils.shuffleArray(cachedQueries) : cachedQueries
-            }
-
             this.bot.logger.debug(
                 this.bot.isMobile,
                 'QUERY-MANAGER',
-                `start | shuffle=${shuffle}, related=${related}, lang=${langCode}, geo=${geoLocale}, sources=${sourceOrder.join(',')}, relatedExpansionLimit=${relatedExpansionLimit}`
+                `start | shuffle=${shuffle}, related=${related}, lang=${langCode}, geo=${geoLocale}, sources=${sourceOrder.join(',')}`
             )
 
             const topicLists: string[][] = []
@@ -108,9 +90,7 @@ export class QueryProvider {
             )
             this.bot.logger.debug(this.bot.isMobile, 'QUERY-MANAGER', `baseTopics: ${baseTopics.length}`)
 
-            const clusters = related
-                ? await this.buildRelatedClusters(baseTopics, langCode, relatedExpansionLimit)
-                : baseTopics.map(t => [t])
+            const clusters = related ? await this.buildRelatedClusters(baseTopics, langCode) : baseTopics.map(t => [t])
 
             this.bot.utils.shuffleArray(clusters)
             this.bot.logger.debug(this.bot.isMobile, 'QUERY-MANAGER', 'clusters shuffled')
@@ -142,8 +122,7 @@ export class QueryProvider {
 
             this.bot.logger.debug(this.bot.isMobile, 'QUERY-MANAGER', `final queries: ${finalQueries.length}`)
 
-            queryCache.set(cacheKey, finalQueries)
-            return shuffle ? this.bot.utils.shuffleArray(finalQueries.slice()) : finalQueries
+            return finalQueries
         } catch (error) {
             this.bot.logger.debug(
                 this.bot.isMobile,
@@ -154,16 +133,12 @@ export class QueryProvider {
         }
     }
 
-    private async buildRelatedClusters(
-        baseTopics: string[],
-        langCode: string,
-        relatedExpansionLimit: number
-    ): Promise<string[][]> {
+    private async buildRelatedClusters(baseTopics: string[], langCode: string): Promise<string[][]> {
         const clusters: string[][] = []
 
-        const limit = Math.max(0, relatedExpansionLimit)
-        const head = baseTopics.slice(0, limit)
-        const tail = baseTopics.slice(limit)
+        const LIMIT = 50
+        const head = baseTopics.slice(0, LIMIT)
+        const tail = baseTopics.slice(LIMIT)
 
         this.bot.logger.debug(
             this.bot.isMobile,
@@ -173,7 +148,7 @@ export class QueryProvider {
         this.bot.logger.debug(
             this.bot.isMobile,
             'QUERY-MANAGER',
-            `bing expansion enabled | limit=${limit} | totalCalls=${head.length * 2}`
+            `bing expansion enabled | limit=${LIMIT} | totalCalls=${head.length * 2}`
         )
 
         for (const topic of head) {

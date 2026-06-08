@@ -16,7 +16,6 @@ jobs:
             DATABASE_URL: ${{ secrets.DATABASE_URL }}
             ACCOUNTS_JSON: ${{ secrets.ACCOUNTS_JSON }}
             CONFIG_JSON: ${{ secrets.CONFIG_JSON }}
-            BROWSER_CHANNEL: chromium
             # Force headless and non-interactive mode
             FORCE_HEADLESS: '1'
             CI: 'true'
@@ -31,68 +30,17 @@ jobs:
                   node-version: '24.15.0'
                   cache: 'npm'
 
-            - name: Cache Patchright Chromium
-              id: patchright-cache
-              uses: actions/cache@v4
-              with:
-                  path: |
-                      ~/.cache/ms-playwright
-                      ~/.cache/patchright
-                  key: ${{ runner.os }}-patchright-${{ hashFiles('package-lock.json') }}
-                  restore-keys: |
-                      ${{ runner.os }}-patchright-
-
             - name: Install dependencies
-              run: |
-                  start=$(date +%s)
-                  npm ci --prefer-offline --no-audit --no-fund
-                  end=$(date +%s)
-                  echo "npm ci: $((end-start))s" >> "$GITHUB_STEP_SUMMARY"
+              run: npm ci
 
             - name: Install Chromium browser
-              if: steps.patchright-cache.outputs.cache-hit != 'true'
-              run: |
-                  start=$(date +%s)
-                  npx patchright install --with-deps chromium
-                  end=$(date +%s)
-                  echo "Patchright install: $((end-start))s" >> "$GITHUB_STEP_SUMMARY"
+              run: npx patchright install --with-deps chromium
 
             - name: Build the bot
-              run: |
-                  start=$(date +%s)
-                  npm run build
-                  end=$(date +%s)
-                  echo "Build: $((end-start))s" >> "$GITHUB_STEP_SUMMARY"
-
-            - name: Apply CI runtime profile
-              run: |
-                  node <<'NODE' >> "$GITHUB_ENV"
-                  const raw = process.env.CONFIG_JSON || '{}'
-                  const config = JSON.parse(raw)
-                  config.headless = true
-                  config.searchSettings = {
-                    ...(config.searchSettings || {}),
-                    scrollRandomResults: false,
-                    clickRandomResults: false,
-                    searchResultVisitTime: '3sec',
-                    searchDelay: { min: '3sec', max: '6sec' },
-                    stagnantLoopMax: 3,
-                    extraStagnantLoopMax: 2,
-                    relatedQueryExpansionLimit: 8,
-                    pointRefreshInterval: 2
-                  }
-                  config.browser = { ...(config.browser || {}), channel: 'chromium' }
-                  console.log('CONFIG_JSON<<EOF')
-                  console.log(JSON.stringify(config))
-                  console.log('EOF')
-                  NODE
+              run: npm run build
 
             - name: Run the bot
-              run: |
-                  start=$(date +%s)
-                  node ./dist/index.js
-                  end=$(date +%s)
-                  echo "Bot run: $((end-start))s" >> "$GITHUB_STEP_SUMMARY"
+              run: node ./dist/index.js
 
             - name: Upload Diagnostics
               if: always()

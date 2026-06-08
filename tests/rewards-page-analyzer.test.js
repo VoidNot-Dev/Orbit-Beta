@@ -66,28 +66,3 @@ test('collectScriptsForPage supports browser _files asset directories', () => {
 
     assert.match(collectScriptsForPage(pageFile), /reportActivity/)
 })
-
-test('rewards page analyzer extracts ctaUrl from new rewards cards', () => {
-    const text = `
-        {"items":[
-            {"title":"True friends use Bing together","ctaUrl":"https://rewards.bing.com/referandearn/","offerId":"banner_RAF_Search_And_Earn_Redirection","hash":"426918b4183b97260836b6c3b7c0e4d91fcbb11838eec7de6ad55da313cdbfa5"},
-            {"title":"Claim Sea of Thieves bonuses","ctaUrl":"https://rewards.bing.com/redeem/000400000415?form=ML2XMJ","offerId":"WW_evergreen_SeaofThieves_Ruby_Awareness_Banner","hash":"dd83fe2bb0b88768c60e46e17e4f04a51919a710a87410c969b99badac9fb9a2"},
-            {"title":"Turn referrals into Rewards","ctaUrl":"https://rewards.bing.com/referandearn?form=ML2X5V","offerId":"WW_Rewards_Campaign_RAF_Engagement_20250926_2","hash":"1dc1e7404b74ffd35898f76d34fd06fb26e3d91f97b7e22f28221cc1b8146d39"}
-        ]}
-    `
-    const activities = require('../scripts/rewards-page-analyzer').extractRewardsActivities(text)
-    const byOfferId = new Map(activities.map(activity => [activity.offerId, activity]))
-
-    assert.equal(
-        byOfferId.get('banner_RAF_Search_And_Earn_Redirection')?.ctaUrl,
-        'https://rewards.bing.com/referandearn/'
-    )
-    assert.equal(
-        byOfferId.get('WW_evergreen_SeaofThieves_Ruby_Awareness_Banner')?.ctaUrl,
-        'https://rewards.bing.com/redeem/000400000415?form=ML2XMJ'
-    )
-    assert.equal(
-        byOfferId.get('WW_Rewards_Campaign_RAF_Engagement_20250926_2')?.ctaUrl,
-        'https://rewards.bing.com/referandearn?form=ML2X5V'
-    )
-})
